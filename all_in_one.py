@@ -12,6 +12,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
 import time
 import json
+import base64
 import asyncio  # Import asyncio
 from concurrent.futures import ThreadPoolExecutor  # Import ThreadPoolExecutor
 
@@ -53,6 +54,7 @@ chrome_options.add_argument("--disable-infobars")
 chrome_options.add_argument("--mute-audio")
 chrome_options.add_argument("--disable-background-networking")
 chrome_options.add_argument("--disable-background-timer-throttling")
+chrome_options.add_argument("--enable-unsafe-swiftshader")
 
 
 # --- Initialize a single WebDriver instance ---
@@ -127,15 +129,25 @@ class EmbeddingResponse(BaseModel):
 # Define the data model for the request
 class ScrapeRequest(BaseModel):
     url: str
+    download_images: bool = False  # Default to True for backward compatibility
 
 
 # Define the data model for the response
+class ImageData(BaseModel):
+    url: str
+    width: int
+    height: int
+    format: str
+    size_bytes: int
+
 class ScrapeResponse(BaseModel):
     code: int
     status: int
     data: dict
     message: str
     readableMessage: str
+    images_metadata: List[ImageData] = []
+    images_data: Optional[Dict[str, str]] = None  # Only populated when download_images=True
 
 
 
@@ -236,25 +248,24 @@ async def embeddings_endpoint(request: Request, item: EmbeddingInput):
 # Use a thread pool to handle scraping tasks concurrently
 executor = ThreadPoolExecutor(max_workers=5)  # Adjust max_workers as needed
 
-def scrape_website(url: str):
-    """Scrapes content from a given URL using Selenium."""
+def scrape_website(url: str, download_images: bool = True):
+    """Scrapes content from a given URL using Selenium.
+    Args:
+        url: URL to scrape
+        download_images: Whether to download images (default: True)
+    """
     try:
         driver = initialize_driver()  # Ensure driver is initialized
-        # print('getting page from url')
-        # Navigate to the URL
         driver.get(url)
-        time.sleep(1)  # Wait for the page to load
+        time.sleep(2)  # Wait for the page to load
 
-        # print('getting title')
         # Extract title
         try:
             title = driver.find_element(By.TAG_NAME, "title").text
         except:
             title = ""
-        # print(title)
 
-        # print('getting description')
-        # Extract description (from meta tag)
+        # Extract description
         try:
             description_element = driver.find_element(
                 By.XPATH, '//meta[@name="description"]'
@@ -262,14 +273,10 @@ def scrape_website(url: str):
             description = description_element.get_attribute("content")
         except:
             description = ""
-        # print(description)
 
-        # print('getting content')
         # Extract text content
         content = driver.find_element(By.TAG_NAME, "body").text
-        # print(type(content), len(content))
 
-        # print('getting links')
         # Extract links
         links: List[Tuple[str, str]] = []
         a_tags = driver.find_elements(By.TAG_NAME, "a")
@@ -281,21 +288,64 @@ def scrape_website(url: str):
                     links.append((text, href))
             except:
                 pass
-        # print(links)
 
-        # Count tokens
-        # tokens = count_tokens(content)
-        tokens = 0
+        # Extract and download images
+        images_metadata = []
+        images_data = {}
+        
+        # First collect all image URLs and metadata
+        img_elements = driver.find_elements(By.TAG_NAME, "img")
+        img_info = []
+        for img in img_elements:
+            try:
+                img_url = img.get_attribute("src")
+                if not img_url:
+                    continue
+                
+                width = img.get_attribute("width") or 0
+                height = img.get_attribute("height") or 0
+                format = img_url.split('.')[-1].lower() if '.' in img_url else 'unknown'
+                
+                img_info.append({
+                    "url": img_url,
+                    "width": int(width),
+                    "height": int(height),
+                    "format": format
+                })
+            except Exception as e:
+                print(f"Failed to get image metadata: {str(e)}")
+                continue
+        
+        # Then download each image if requested
+        if download_images:
+            for info in img_info:
+                try:
+                    driver.get(info["url"])
+                    img_data = driver.get_screenshot_as_png()
+                    info["size_bytes"] = len(img_data)
+                    images_metadata.append(info)
+                    images_data[info["url"]] = base64.b64encode(img_data).decode('utf-8')
+                except Exception as e:
+                    print(f"Failed to download image {info['url']}: {str(e)}")
+        else:
+            # Just collect metadata without downloading
+            images_metadata.extend(img_info)
+            for info in img_info:
+                info["size_bytes"] = 0  # Set size to 0 since we didn't download
+        
+        # Return to original page
+        driver.get(url)
 
         data = {
             "title": title,
             "description": description,
             "url": url,
             "content": content,
-            "usage": {"tokens": tokens},
+            "usage": {"tokens": 0},
             "links": links,
+            "images_metadata": images_metadata,
+            "images_data": images_data if download_images else None
         }
-        # print('scrape finished')
         return data
 
     except Exception as e:
