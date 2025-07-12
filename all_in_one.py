@@ -1,6 +1,7 @@
 from fastapi import FastAPI, Request, HTTPException
 from pydantic import BaseModel
-from typing import List, Optional, Dict, Tuple
+from typing import List, Optional, Dict, Tuple, AsyncContextManager
+from contextlib import asynccontextmanager
 from transformers import AutoModelForSequenceClassification, AutoTokenizer, AutoModel
 import torch
 import numpy as np
@@ -10,7 +11,8 @@ from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
-import time
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 import json
 import base64
 import asyncio  # Import asyncio
@@ -48,7 +50,7 @@ chrome_options.add_argument("--no-sandbox")
 chrome_options.add_argument("--disable-dev-shm-usage")
 chrome_options.add_argument("--remote-debugging-port=9222")
 chrome_options.add_argument("--disable-blink-features=AutomationControlled")
-chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36")
+# chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36")
 chrome_options.add_argument("--disable-extensions")
 chrome_options.add_argument("--disable-infobars")
 chrome_options.add_argument("--mute-audio")
@@ -67,16 +69,16 @@ def initialize_driver():
         driver = webdriver.Chrome(service=service, options=chrome_options)
     return driver
 
-# Initialize the driver on startup
-@app.on_event("startup")
-async def startup_event():
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncContextManager[None]:
+    # Startup logic
     initialize_driver()
-
-# Close the driver on shutdown
-@app.on_event("shutdown")
-async def shutdown_event():
+    yield
+    # Shutdown logic
     if driver:
         driver.quit()
+
+app = FastAPI(lifespan=lifespan)
 
 # --- Request and Response models ---
 class RerankRequest(BaseModel):
@@ -257,8 +259,11 @@ def scrape_website(url: str, download_images: bool = True):
     try:
         driver = initialize_driver()  # Ensure driver is initialized
         driver.get(url)
-        time.sleep(2)  # Wait for the page to load
-
+        wait = WebDriverWait(driver, 2)  # 10 second timeout
+        
+        # Wait for page to load basic elements
+        wait.until(EC.presence_of_element_located((By.TAG_NAME, 'body')))
+        
         # Extract title
         try:
             title = driver.find_element(By.TAG_NAME, "title").text
@@ -293,6 +298,10 @@ def scrape_website(url: str, download_images: bool = True):
         images_metadata = []
         images_data = {}
         
+        # Wait for at least some images to be present if downloading
+        if download_images:
+            wait.until(EC.presence_of_element_located((By.TAG_NAME, 'img')))
+            
         # First collect all image URLs and metadata
         img_elements = driver.find_elements(By.TAG_NAME, "img")
         img_info = []
