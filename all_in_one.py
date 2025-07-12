@@ -146,10 +146,8 @@ class ScrapeResponse(BaseModel):
     code: int
     status: int
     data: dict
-    message: str
-    readableMessage: str
-    images_metadata: List[ImageData] = []
-    images_data: Optional[Dict[str, str]] = None  # Only populated when download_images=True
+    # images_metadata: List[ImageData] = []
+    # images_data: Optional[Dict[str, str]] = None  # Only populated when download_images=True
 
 
 
@@ -259,7 +257,7 @@ def scrape_website(url: str, download_images: bool = True):
     try:
         driver = initialize_driver()  # Ensure driver is initialized
         driver.get(url)
-        wait = WebDriverWait(driver, 2)  # 10 second timeout
+        wait = WebDriverWait(driver, 10)  # 10 second timeout
         
         # Wait for page to load basic elements
         wait.until(EC.presence_of_element_located((By.TAG_NAME, 'body')))
@@ -304,17 +302,15 @@ def scrape_website(url: str, download_images: bool = True):
             
             # Collect and download images
             img_elements = driver.find_elements(By.TAG_NAME, "img")
-            for img in img_elements:
+            img_urls = [img.get_attribute("src") for img in img_elements if img.get_attribute("src")]
+            
+            for img_url in img_urls:
                 try:
-                    img_url = img.get_attribute("src")
-                    if not img_url:
-                        continue
-                    
+                    driver.get(img_url)
+                    img = driver.find_element(By.TAG_NAME, "img")
                     width = img.get_attribute("width") or 0
                     height = img.get_attribute("height") or 0
                     format = img_url.split('.')[-1].lower() if '.' in img_url else 'unknown'
-                    
-                    driver.get(img_url)
                     img_data = driver.get_screenshot_as_png()
                     
                     images_metadata.append({
@@ -367,8 +363,6 @@ async def scrape(request: ScrapeRequest):
             code=200,
             status=200,
             data=result,
-            message='',
-            readableMessage=''
         )
         return response
     except Exception as e:
