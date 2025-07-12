@@ -50,7 +50,7 @@ chrome_options.add_argument("--no-sandbox")
 chrome_options.add_argument("--disable-dev-shm-usage")
 chrome_options.add_argument("--remote-debugging-port=9222")
 chrome_options.add_argument("--disable-blink-features=AutomationControlled")
-# chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36")
+chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36")
 chrome_options.add_argument("--disable-extensions")
 chrome_options.add_argument("--disable-infobars")
 chrome_options.add_argument("--mute-audio")
@@ -294,56 +294,44 @@ def scrape_website(url: str, download_images: bool = True):
             except:
                 pass
 
-        # Extract and download images
+        # Extract and download images only if requested
         images_metadata = []
         images_data = {}
         
-        # Wait for at least some images to be present if downloading
         if download_images:
+            # Wait for images to load only if we're downloading them
             wait.until(EC.presence_of_element_located((By.TAG_NAME, 'img')))
             
-        # First collect all image URLs and metadata
-        img_elements = driver.find_elements(By.TAG_NAME, "img")
-        img_info = []
-        for img in img_elements:
-            try:
-                img_url = img.get_attribute("src")
-                if not img_url:
-                    continue
-                
-                width = img.get_attribute("width") or 0
-                height = img.get_attribute("height") or 0
-                format = img_url.split('.')[-1].lower() if '.' in img_url else 'unknown'
-                
-                img_info.append({
-                    "url": img_url,
-                    "width": int(width),
-                    "height": int(height),
-                    "format": format
-                })
-            except Exception as e:
-                print(f"Failed to get image metadata: {str(e)}")
-                continue
-        
-        # Then download each image if requested
-        if download_images:
-            for info in img_info:
+            # Collect and download images
+            img_elements = driver.find_elements(By.TAG_NAME, "img")
+            for img in img_elements:
                 try:
-                    driver.get(info["url"])
+                    img_url = img.get_attribute("src")
+                    if not img_url:
+                        continue
+                    
+                    width = img.get_attribute("width") or 0
+                    height = img.get_attribute("height") or 0
+                    format = img_url.split('.')[-1].lower() if '.' in img_url else 'unknown'
+                    
+                    driver.get(img_url)
                     img_data = driver.get_screenshot_as_png()
-                    info["size_bytes"] = len(img_data)
-                    images_metadata.append(info)
-                    images_data[info["url"]] = base64.b64encode(img_data).decode('utf-8')
+                    
+                    images_metadata.append({
+                        "url": img_url,
+                        "width": int(width),
+                        "height": int(height),
+                        "format": format,
+                        "size_bytes": len(img_data)
+                    })
+                    images_data[img_url] = base64.b64encode(img_data).decode('utf-8')
                 except Exception as e:
-                    print(f"Failed to download image {info['url']}: {str(e)}")
-        else:
-            # Just collect metadata without downloading
-            images_metadata.extend(img_info)
-            for info in img_info:
-                info["size_bytes"] = 0  # Set size to 0 since we didn't download
+                    print(f"Failed to download image {img_url}: {str(e)}")
+            
+            # Return to original page
+            driver.get(url)
         
-        # Return to original page
-        driver.get(url)
+        # Skip image processing entirely if download_images is False
 
         data = {
             "title": title,
@@ -368,7 +356,12 @@ async def scrape(request: ScrapeRequest):
     try:
         # Run the scraping task in a separate thread
         loop = asyncio.get_event_loop()
-        result = await loop.run_in_executor(executor, scrape_website, request.url)
+        result = await loop.run_in_executor(
+            executor, 
+            scrape_website, 
+            request.url,
+            request.download_images
+        )
 
         response = ScrapeResponse(
             code=200,
