@@ -1,6 +1,5 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from typing import List, Optional
 from contextlib import asynccontextmanager
 
 from models import (
@@ -56,7 +55,6 @@ async def rerank_endpoint(request: RerankRequest):
     return await reranker.rerank(
         request
     )
-
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=1000)
