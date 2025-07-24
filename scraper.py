@@ -57,7 +57,8 @@ class Scraper:
                 self.executor,
                 self._scrape_website_with_proxy, # We call the new proxy-aware method
                 scrap_request.url,
-                scrap_request.download_images
+                scrap_request.download_images,
+                scrap_request.get_html
             )
         except Exception as e:
             # Catch exceptions bubbled up from the thread
@@ -65,7 +66,7 @@ class Scraper:
 
         return ScrapeResponse(data=result)
     
-    def _scrape_website_with_proxy(self, url: str, download_images: bool = False) -> Dict:
+    def _scrape_website_with_proxy(self, url: str, download_images: bool = False, get_html: bool = False) -> Dict:
         """
         Creates a new WebDriver instance with a random proxy for a single scrape job,
         then closes it.
@@ -136,6 +137,7 @@ class Scraper:
                 description = ""
 
             content = self.driver.find_element(By.TAG_NAME, "body").text
+            html = self.driver.page_source if get_html else None
 
             links: List[Tuple[str, str]] = []
             a_tags = self.driver.find_elements(By.TAG_NAME, "a")
@@ -178,6 +180,7 @@ class Scraper:
                 "description": description, 
                 "url": url, 
                 "content": content,
+                "html": html,
                 "usage": {"tokens": 0}, 
                 "links": links, 
                 "images_metadata": images_metadata,

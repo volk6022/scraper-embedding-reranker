@@ -54,6 +54,7 @@ class ImageData(BaseModel):
 class ScrapeRequest(BaseModel):
     url: str
     download_images: bool = False
+    get_html: bool = False
 
 class ScrapeResponse(BaseModel):
     data: dict
