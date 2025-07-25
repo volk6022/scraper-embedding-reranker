@@ -17,15 +17,11 @@ class Embedder:
     async def get_embeddings(self, embedding_request: EmbeddingRequest) -> EmbeddingResponse:
         """Generates embeddings for a list of texts using the loaded model."""
         model = embedding_request.model
-        texts = embedding_request.texts
-        task = embedding_request.task
-        truncate = embedding_request.truncate
+        input_texts = embedding_request.input
         dimensions = embedding_request.dimensions
-        late_chunking = embedding_request.late_chunking
-        embedding_type = embedding_request.embedding_type
 
         try:
-            encoded_input = self.tokenizer(texts, padding=True, truncation=truncate, return_tensors='pt').to(self.device)
+            encoded_input = self.tokenizer(input_texts, padding=True, return_tensors='pt').to(self.device)
             
             prompt_tokens = torch.sum(encoded_input['attention_mask']).item()
             total_tokens = prompt_tokens

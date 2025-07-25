@@ -197,5 +197,5 @@ class Scraper:
                 driver.quit() # CRUCIAL: Always close the driver to free up resources
 
     async def close(self):
-        self.driver.quit()
+        # self.driver.quit()
         self.executor.shutdown(wait=True)

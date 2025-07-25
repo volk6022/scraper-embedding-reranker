@@ -44,13 +44,13 @@ async def scrape_endpoint(request: ScrapeRequest):
         request
     )
 
-@app.post("/embed", response_model=EmbeddingResponse)
+@app.post("/v1/embeddings", response_model=EmbeddingResponse)
 async def embed_endpoint(request: EmbeddingRequest):
     return await embedder.get_embeddings(
         request
     )
 
-@app.post("/rerank", response_model=RerankResponse)
+@app.post("/v1/rerank", response_model=RerankResponse)
 async def rerank_endpoint(request: RerankRequest):
     return await reranker.rerank(
         request

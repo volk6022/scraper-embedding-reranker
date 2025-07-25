@@ -21,7 +21,7 @@ class RerankResponse(BaseModel):
 # --- Embedding Models ---
 class EmbeddingRequest(BaseModel):
     model: str = "jina-embeddings-v3"
-    texts: List[str]
+    input: List[str]
     task: Optional[str] = "text-matching"
     truncate: Optional[bool] = True
     dimensions: Optional[int] = 128
