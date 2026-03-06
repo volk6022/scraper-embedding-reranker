@@ -1,0 +1,12 @@
+fastapi
+uvicorn
+selenium
+selenium-stealth
+fake-useragent
+torch
+transformers
+pydantic
+httpx
+einops
+sentencepiece
+accelerate
