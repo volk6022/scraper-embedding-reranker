@@ -8,12 +8,17 @@ from models import (
     EmbeddingRequest,
     EmbeddingResponse,
     RerankRequest,
-    RerankResponse
+    RerankResponse,
+    ReaderRequest,
+    ReaderResponse,
 )
 
 from scraper import Scraper
 from embedding import Embedder
 from reranker import Reranker
+from reader import Reader
+from config import args
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -21,6 +26,8 @@ async def lifespan(app: FastAPI):
     await scraper.close()
     await embedder.close()
     await reranker.close()
+    await reader.close()
+
 
 app = FastAPI(lifespan=lifespan)
 
@@ -37,24 +44,31 @@ app.add_middleware(
 scraper = Scraper()
 embedder = Embedder()
 reranker = Reranker()
+reader = Reader()
+
 
 @app.post("/scrape", response_model=ScrapeResponse)
 async def scrape_endpoint(request: ScrapeRequest):
-    return await scraper.scrape(
-        request
-    )
+    return await scraper.scrape(request)
+
 
 @app.post("/v1/embeddings", response_model=EmbeddingResponse)
 async def embed_endpoint(request: EmbeddingRequest):
-    return await embedder.get_embeddings(
-        request
-    )
+    return await embedder.get_embeddings(request)
+
 
 @app.post("/v1/rerank", response_model=RerankResponse)
 async def rerank_endpoint(request: RerankRequest):
-    return await reranker.rerank(
-        request
-    )
+    return await reranker.rerank(request)
+
+
+@app.post("/v1/reader", response_model=ReaderResponse)
+async def reader_endpoint(request: ReaderRequest):
+    return await reader.read(request)
+
+
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=1000)
+
+    print(f"Starting server with args: {args}")
+    uvicorn.run(app, host=args.host, port=args.port)

@@ -1,6 +1,20 @@
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Tuple
 
+
+# --- Reader Models ---
+class ReaderRequest(BaseModel):
+    html: str
+    instruction: Optional[str] = None
+    extraction_schema: Optional[str] = None
+    clean_svg: bool = False
+    clean_base64: bool = False
+
+
+class ReaderResponse(BaseModel):
+    content: str
+
+
 # --- Reranker Models ---
 class RerankRequest(BaseModel):
     model: str
@@ -8,15 +22,18 @@ class RerankRequest(BaseModel):
     top_n: int
     documents: list[str]
 
+
 class RerankResult(BaseModel):
     index: int
     document: dict
     relevance_score: float
 
+
 class RerankResponse(BaseModel):
     model: str
     results: list[RerankResult]
     usage: dict
+
 
 # --- Embedding Models ---
 class EmbeddingRequest(BaseModel):
@@ -28,20 +45,24 @@ class EmbeddingRequest(BaseModel):
     late_chunking: Optional[bool] = None
     embedding_type: Optional[str] = None
 
+
 class EmbeddingData(BaseModel):
     index: int
     object: str = "embedding"
     embedding: List[float]
 
+
 class EmbeddingUsage(BaseModel):
     prompt_tokens: int
     total_tokens: int
+
 
 class EmbeddingResponse(BaseModel):
     data: List[EmbeddingData]
     model: str = "jina-embeddings-v3"
     object: str = "list"
     usage: EmbeddingUsage
+
 
 # --- Scraper Models ---
 class ImageData(BaseModel):
@@ -51,10 +72,12 @@ class ImageData(BaseModel):
     format: str
     size_bytes: int
 
+
 class ScrapeRequest(BaseModel):
     url: str
     download_images: bool = False
     get_html: bool = False
+
 
 class ScrapeResponse(BaseModel):
     data: dict
