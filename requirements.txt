@@ -1,7 +1,7 @@
 fastapi
 uvicorn
-selenium
-selenium-stealth
+playwright
+playwright-stealth
 fake-useragent
 torch
 transformers
