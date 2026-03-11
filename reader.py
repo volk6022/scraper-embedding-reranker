@@ -25,6 +25,7 @@ class Reader:
         self.device = args.device if torch.cuda.is_available() else "cpu"
         self.lock = asyncio.Lock()
         self.executor = ThreadPoolExecutor(max_workers=1)
+        print("using device:", self.device)
 
         if not args.lazy_load:
             self._load_model()
@@ -33,14 +34,20 @@ class Reader:
         if self.model is None:
             print(f"Loading Reader model: {self.model_name}")
             self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
-            self.model = AutoModelForCausalLM.from_pretrained(self.model_name).to(
-                self.device
-            )
+            if self.tokenizer.pad_token is None:
+                self.tokenizer.pad_token = self.tokenizer.eos_token
+            self.model = AutoModelForCausalLM.from_pretrained(
+                self.model_name,
+                torch_dtype=torch.float16 if "cuda" in self.device else torch.float32,
+                trust_remote_code=True,
+            ).to(self.device)
             self.model.eval()
 
     def clean_html(
         self, html: str, clean_svg: bool = False, clean_base64: bool = False
     ):
+        if not html:
+            return ""
         html = re.sub(
             SCRIPT_PATTERN, "", html, flags=re.IGNORECASE | re.MULTILINE | re.DOTALL
         )
@@ -96,29 +103,36 @@ class Reader:
             html, request.instruction, request.extraction_schema
         )
 
-        inputs = self.tokenizer.encode(input_prompt, return_tensors="pt").to(
-            self.device
+        inputs = self.tokenizer(input_prompt, return_tensors="pt").to(self.device)
+        input_len = inputs.input_ids.shape[1]
+
+        print(f"Generating content. Input tokens: {input_len}, max_new_tokens: 2048")
+        try:
+            with torch.no_grad():
+                outputs = self.model.generate(
+                    **inputs,
+                    max_new_tokens=2048,
+                    temperature=0,
+                    do_sample=False,
+                    repetition_penalty=1.08,
+                    pad_token_id=self.tokenizer.pad_token_id,
+                    eos_token_id=self.tokenizer.eos_token_id,
+                )
+            print("Generation complete.")
+        except Exception as e:
+            print(f"Generation failed: {str(e)}")
+            raise e
+
+        # Get only the newly generated tokens
+        decoded_output = self.tokenizer.decode(
+            outputs[0][input_len:], skip_special_tokens=True
         )
-
-        with torch.no_grad():
-            outputs = self.model.generate(
-                inputs,
-                max_new_tokens=1024,
-                temperature=0,
-                do_sample=False,
-                repetition_penalty=1.08,
-            )
-
-        decoded_output = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
-
-        if "assistant\n" in decoded_output:
-            decoded_output = decoded_output.split("assistant\n")[-1]
 
         if args.low_vram and self.device.startswith("cuda"):
             self.model.to("cpu")
             torch.cuda.empty_cache()
 
-        return decoded_output
+        return decoded_output.strip()
 
     async def read(self, request: ReaderRequest) -> ReaderResponse:
         async with self.lock:
